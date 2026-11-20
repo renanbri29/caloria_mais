@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class AppColors {
   static const Color primary = Color(0xFF087F5B);
@@ -264,6 +267,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 class FoodEntryStore {
   static final List<Map<String, dynamic>> entries = [];
   static final List<Map<String, dynamic>> savedFoods = [];
+  static final List<Map<String, dynamic>> savedDishes = [];
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
   static double calorieGoal = 2000;
 
@@ -283,6 +287,12 @@ class FoodEntryStore {
     entry['protein'] = (entry['protein'] as num).toDouble() * factor;
     entry['carbs'] = (entry['carbs'] as num).toDouble() * factor;
     entry['fat'] = (entry['fat'] as num).toDouble() * factor;
+    revision.value++;
+  }
+
+  // Remove um alimento da refeição e avisa as telas para atualizar os totais.
+  static void remove(Map<String, dynamic> entry) {
+    entries.remove(entry);
     revision.value++;
   }
 
@@ -715,91 +725,81 @@ class _AddFoodScreenState extends State<AddFoodScreen>
   final _carbsController = TextEditingController();
   final _fatController = TextEditingController();
   final _caloriesController = TextEditingController();
+  final _dishNameController = TextEditingController();
+  final _dishSearchController = TextEditingController();
+  final List<Map<String, dynamic>> _dishIngredients = [];
+  String _dishSearchQuery = '';
 
   bool _isManualCalories = false;
   String _searchQuery = '';
 
-  // Valores nutricionais de referência para cada 100 g.
-  // São exemplos locais; ainda não vêm de uma API ou banco de dados.
-  final List<Map<String, dynamic>> _foods = [
-    {
-      'name': 'Arroz branco cozido',
-      'category': 'Grãos',
-      'calories': 130.0,
-      'protein': 2.7,
-      'carbs': 28.2,
-      'fat': 0.3,
-      'icon': Icons.rice_bowl_rounded,
-    },
-    {
-      'name': 'Peito de frango grelhado',
-      'category': 'Carnes',
-      'calories': 159.0,
-      'protein': 32.0,
-      'carbs': 0.0,
-      'fat': 2.5,
-      'icon': Icons.egg_alt_rounded,
-    },
-    {
-      'name': 'Ovo cozido',
-      'category': 'Proteínas',
-      'calories': 155.0,
-      'protein': 13.0,
-      'carbs': 1.1,
-      'fat': 11.0,
-      'icon': Icons.egg_rounded,
-    },
-    {
-      'name': 'Banana',
-      'category': 'Frutas',
-      'calories': 89.0,
-      'protein': 1.1,
-      'carbs': 22.8,
-      'fat': 0.3,
-      'icon': Icons.spa_rounded,
-    },
-    {
-      'name': 'Batata-doce cozida',
-      'category': 'Legumes',
-      'calories': 86.0,
-      'protein': 1.6,
-      'carbs': 20.1,
-      'fat': 0.1,
-      'icon': Icons.grass_rounded,
-    },
-    {
-      'name': 'Aveia em flocos',
-      'category': 'Grãos',
-      'calories': 394.0,
-      'protein': 13.9,
-      'carbs': 66.6,
-      'fat': 8.5,
-      'icon': Icons.grain_rounded,
-    },
-    {
-      'name': 'Leite integral',
-      'category': 'Laticínios',
-      'calories': 61.0,
-      'protein': 3.2,
-      'carbs': 4.7,
-      'fat': 3.3,
-      'icon': Icons.local_drink_rounded,
-    },
-    {
-      'name': 'Feijão carioca cozido',
-      'category': 'Grãos',
-      'calories': 76.0,
-      'protein': 4.8,
-      'carbs': 13.6,
-      'fat': 0.5,
-      'icon': Icons.soup_kitchen_rounded,
-    },
-  ];
+  // Catálogo carregado do arquivo assets/data/alimentos.json.
+  List<Map<String, dynamic>> _foods = [];
+  bool _foodsLoading = true;
+  String? _foodsError;
+
+  IconData _iconForCategory(String category) {
+    final value = category.toLowerCase();
+    if (value.contains('fruta')) return Icons.spa_rounded;
+    if (value.contains('peixe')) return Icons.set_meal_rounded;
+    if (value.contains('carne') || value.contains('ave')) {
+      return Icons.lunch_dining_rounded;
+    }
+    if (value.contains('ovo')) return Icons.egg_rounded;
+    if (value.contains('leite') || value.contains('derivado')) {
+      return Icons.local_drink_rounded;
+    }
+    if (value.contains('verdura') || value.contains('legume')) {
+      return Icons.grass_rounded;
+    }
+    if (value.contains('cereal') || value.contains('pães')) {
+      return Icons.rice_bowl_rounded;
+    }
+    if (value.contains('oleaginosa')) return Icons.grain_rounded;
+    return Icons.restaurant_rounded;
+  }
+
+  Future<void> _loadFoods() async {
+    try {
+      final jsonText = await rootBundle.loadString(
+        'assets/data/alimentos.json',
+      );
+      final decoded = jsonDecode(jsonText) as Map<String, dynamic>;
+      final items = decoded['foods'] as List<dynamic>;
+
+      final loadedFoods = items.map((item) {
+        final food = Map<String, dynamic>.from(item as Map);
+        return <String, dynamic>{
+          'name': food['name'] as String,
+          'category': food['category'] as String,
+          'calories': (food['calories'] as num).toDouble(),
+          'protein': (food['protein'] as num).toDouble(),
+          'carbs': (food['carbs'] as num).toDouble(),
+          'fat': (food['fat'] as num).toDouble(),
+          'icon': _iconForCategory(food['category'] as String),
+        };
+      }).toList();
+
+      if (!mounted) return;
+      setState(() {
+        _foods = loadedFoods;
+        _foodsLoading = false;
+        _foodsError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _foodsLoading = false;
+        _foodsError = 'Não foi possível carregar assets/data/alimentos.json.';
+      });
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
+    _loadFoods();
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.trim().toLowerCase();
@@ -817,6 +817,8 @@ class _AddFoodScreenState extends State<AddFoodScreen>
     _carbsController.dispose();
     _fatController.dispose();
     _caloriesController.dispose();
+    _dishNameController.dispose();
+    _dishSearchController.dispose();
     super.dispose();
   }
 
@@ -1044,6 +1046,377 @@ class _AddFoodScreenState extends State<AddFoodScreen>
     );
   }
 
+
+  double _dishTotal(String key) {
+    return _dishIngredients.fold<double>(
+      0,
+      (sum, item) => sum + (item[key] as num).toDouble(),
+    );
+  }
+
+  Future<void> _addDishIngredient(Map<String, dynamic> food) async {
+    final controller = TextEditingController(text: '100');
+    final grams = await showDialog<double>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(food['name'] as String),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Quantidade do ingrediente',
+            suffixText: 'g',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final value = double.tryParse(
+                controller.text.trim().replaceAll(',', '.'),
+              );
+              if (value != null && value > 0) {
+                Navigator.pop(dialogContext, value);
+              }
+            },
+            child: const Text('Adicionar'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (grams == null || !mounted) return;
+
+    final factor = grams / 100;
+    setState(() {
+      _dishIngredients.add({
+        'name': food['name'] as String,
+        'grams': grams,
+        'calories': (food['calories'] as num).toDouble() * factor,
+        'protein': (food['protein'] as num).toDouble() * factor,
+        'carbs': (food['carbs'] as num).toDouble() * factor,
+        'fat': (food['fat'] as num).toDouble() * factor,
+      });
+    });
+  }
+
+  void _saveDish() {
+    final name = _dishNameController.text.trim();
+    if (name.isEmpty || _dishIngredients.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Informe o nome do prato e adicione pelo menos um ingrediente.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final dish = <String, dynamic>{
+      'name': name,
+      'ingredients': _dishIngredients
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(),
+      'grams': _dishTotal('grams'),
+      'calories': _dishTotal('calories'),
+      'protein': _dishTotal('protein'),
+      'carbs': _dishTotal('carbs'),
+      'fat': _dishTotal('fat'),
+    };
+
+    final existingIndex = FoodEntryStore.savedDishes.indexWhere(
+      (item) => (item['name'] as String).toLowerCase() == name.toLowerCase(),
+    );
+
+    setState(() {
+      if (existingIndex >= 0) {
+        FoodEntryStore.savedDishes[existingIndex] = dish;
+      } else {
+        FoodEntryStore.savedDishes.add(dish);
+      }
+      _dishNameController.clear();
+      _dishIngredients.clear();
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$name salvo em Meus pratos.'),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.darkGreen,
+      ),
+    );
+  }
+
+  void _addSavedDishToMeal(Map<String, dynamic> dish) {
+    FoodEntryStore.add({
+      'meal': widget.mealName,
+      'name': dish['name'] as String,
+      'grams': (dish['grams'] as num).toDouble(),
+      'calories': (dish['calories'] as num).toDouble(),
+      'protein': (dish['protein'] as num).toDouble(),
+      'carbs': (dish['carbs'] as num).toDouble(),
+      'fat': (dish['fat'] as num).toDouble(),
+      'isDish': true,
+      'ingredients': (dish['ingredients'] as List)
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList(),
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${dish['name']} adicionado à ${widget.mealName}.'),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.darkGreen,
+      ),
+    );
+  }
+
+  Widget _buildDishBuilder(List<Map<String, dynamic>> allFoods) {
+    final availableFoods = allFoods.where((food) {
+      final name = (food['name'] as String).toLowerCase();
+      final category = (food['category'] as String).toLowerCase();
+      return name.contains(_dishSearchQuery) ||
+          category.contains(_dishSearchQuery);
+    }).toList();
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+      children: [
+        const Text(
+          'Monte seu prato',
+          style: TextStyle(
+            color: AppColors.darkGreen,
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 5),
+        const Text(
+          'Combine ingredientes do catálogo e salve para reutilizar em outras refeições.',
+          style: TextStyle(color: AppColors.muted, fontSize: 12),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _dishNameController,
+          decoration: const InputDecoration(
+            labelText: 'Nome do prato',
+            hintText: 'Ex.: Sanduíche natural',
+            prefixIcon: Icon(Icons.restaurant_menu_rounded),
+          ),
+        ),
+        const SizedBox(height: 18),
+        const Text(
+          '1. Adicione os ingredientes',
+          style: TextStyle(
+            color: AppColors.darkGreen,
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 9),
+        TextField(
+          controller: _dishSearchController,
+          onChanged: (value) => setState(
+            () => _dishSearchQuery = value.trim().toLowerCase(),
+          ),
+          decoration: InputDecoration(
+            hintText: 'Buscar ingrediente...',
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: _dishSearchQuery.isEmpty
+                ? null
+                : IconButton(
+                    onPressed: () {
+                      _dishSearchController.clear();
+                      setState(() => _dishSearchQuery = '');
+                    },
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (_foodsLoading)
+          const Center(child: CircularProgressIndicator())
+        else if (_foodsError != null)
+          Text(_foodsError!, style: const TextStyle(color: Colors.red))
+        else
+          SizedBox(
+            height: 190,
+            child: ListView.separated(
+              itemCount: availableFoods.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final food = availableFoods[index];
+                return ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    food['name'] as String,
+                    style: const TextStyle(
+                      color: AppColors.darkGreen,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text('${food['category']} • por 100 g'),
+                  trailing: IconButton(
+                    tooltip: 'Adicionar ingrediente',
+                    onPressed: () => _addDishIngredient(food),
+                    icon: const Icon(
+                      Icons.add_circle_outline,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                '2. Ingredientes do prato',
+                style: TextStyle(
+                  color: AppColors.darkGreen,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Text(
+              '${_dishIngredients.length} itens',
+              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_dishIngredients.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Text(
+              'Nenhum ingrediente adicionado ainda.',
+              style: TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
+          )
+        else
+          ..._dishIngredients.asMap().entries.map((entry) {
+            final index = entry.key;
+            final item = entry.value;
+            final grams = (item['grams'] as num).toDouble();
+            return Card(
+              child: ListTile(
+                title: Text(item['name'] as String),
+                subtitle: Text(
+                  '${grams.toStringAsFixed(grams % 1 == 0 ? 0 : 1)} g • '
+                  '${(item['calories'] as num).round()} kcal',
+                ),
+                trailing: IconButton(
+                  tooltip: 'Remover ingrediente',
+                  onPressed: () => setState(() => _dishIngredients.removeAt(index)),
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                ),
+              ),
+            );
+          }),
+        if (_dishIngredients.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(
+              color: AppColors.softGreen,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_dishTotal('calories').round()} kcal no prato',
+                  style: const TextStyle(
+                    color: AppColors.darkGreen,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  'Peso total: ${_dishTotal('grams').round()} g',
+                  style: const TextStyle(color: AppColors.darkGreen),
+                ),
+                Text(
+                  'Proteínas ${_dishTotal('protein').toStringAsFixed(1)} g • '
+                  'Carboidratos ${_dishTotal('carbs').toStringAsFixed(1)} g • '
+                  'Gorduras ${_dishTotal('fat').toStringAsFixed(1)} g',
+                  style: const TextStyle(color: AppColors.muted, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _saveDish,
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('Salvar prato'),
+            ),
+          ),
+        ],
+        const SizedBox(height: 26),
+        const Text(
+          'Meus pratos salvos',
+          style: TextStyle(
+            color: AppColors.darkGreen,
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (FoodEntryStore.savedDishes.isEmpty)
+          const Text(
+            'Os pratos que você salvar aparecerão aqui.',
+            style: TextStyle(color: AppColors.muted, fontSize: 12),
+          )
+        else
+          ...FoodEntryStore.savedDishes.map((dish) {
+            final ingredients = dish['ingredients'] as List;
+            return Card(
+              child: ListTile(
+                title: Text(
+                  dish['name'] as String,
+                  style: const TextStyle(
+                    color: AppColors.darkGreen,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                subtitle: Text(
+                  '${(dish['calories'] as num).round()} kcal • '
+                  '${ingredients.length} ingredientes',
+                ),
+                trailing: IconButton(
+                  tooltip: 'Adicionar prato à refeição',
+                  onPressed: () => _addSavedDishToMeal(dish),
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.softGreen,
+                    foregroundColor: AppColors.primary,
+                  ),
+                  icon: const Icon(Icons.add_rounded),
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final allFoods = [..._foods, ...FoodEntryStore.savedFoods];
@@ -1071,6 +1444,7 @@ class _AddFoodScreenState extends State<AddFoodScreen>
           ],
         ),
         bottom: TabBar(
+          isScrollable: true,
           controller: _tabController,
           labelColor: AppColors.primary,
           unselectedLabelColor: AppColors.muted,
@@ -1079,12 +1453,17 @@ class _AddFoodScreenState extends State<AddFoodScreen>
           tabs: const [
             Tab(text: 'Alimentos', icon: Icon(Icons.search_rounded)),
             Tab(text: 'Registro manual', icon: Icon(Icons.edit_note_rounded)),
+            Tab(text: 'Montar prato', icon: Icon(Icons.restaurant_menu_rounded)),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [_buildFoodCatalog(filteredFoods), _buildManualForm()],
+        children: [
+          _buildFoodCatalog(filteredFoods),
+          _buildManualForm(),
+          _buildDishBuilder(allFoods),
+        ],
       ),
     );
   }
@@ -1131,7 +1510,37 @@ class _AddFoodScreenState extends State<AddFoodScreen>
           ),
         ),
         Expanded(
-          child: foods.isEmpty
+          child: _foodsLoading
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                )
+              : _foodsError != null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.error_outline, color: AppColors.muted, size: 42),
+                            const SizedBox(height: 10),
+                            Text(
+                              _foodsError!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: AppColors.muted),
+                            ),
+                            const SizedBox(height: 12),
+                            ElevatedButton(
+                              onPressed: () {
+                                setState(() => _foodsLoading = true);
+                                _loadFoods();
+                              },
+                              child: const Text('Tentar novamente'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : foods.isEmpty
               ? const Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1782,6 +2191,49 @@ class MealDetailScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _confirmRemove(
+    BuildContext context,
+    Map<String, dynamic> entry,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text(
+          'Remover alimento?',
+          style: TextStyle(
+            color: AppColors.darkGreen,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        content: Text(
+          'Deseja remover \"${entry['name']}\" desta refeição?',
+          style: const TextStyle(color: AppColors.muted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Remover'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    FoodEntryStore.remove(entry);
+  }
+
   bool _isToday(DateTime date) {
     final now = DateTime.now();
     return date.year == now.year &&
@@ -1928,6 +2380,14 @@ class MealDetailScreen extends StatelessWidget {
                               icon: const Icon(
                                 Icons.edit_outlined,
                                 color: AppColors.primary,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Remover alimento',
+                              onPressed: () => _confirmRemove(context, entry),
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                color: Colors.redAccent,
                               ),
                             ),
                           ],
