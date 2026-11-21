@@ -308,7 +308,11 @@ class FoodEntryStore {
 
   static double total(String key, {String? meal}) {
     return todayEntries
-        .where((entry) => meal == null || entry['meal'] == meal)
+        .where(
+          (entry) =>
+              meal == null ||
+              (entry['meal'] as String).toLowerCase() == meal.toLowerCase(),
+        )
         .fold<double>(0, (sum, entry) => sum + (entry[key] as num).toDouble());
   }
 }
@@ -441,7 +445,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     String mealSummary(String meal) {
       final items = FoodEntryStore.todayEntries
-          .where((entry) => entry['meal'] == meal)
+          .where(
+            (entry) =>
+                (entry['meal'] as String).toLowerCase() == meal.toLowerCase(),
+          )
           .toList();
       if (items.isEmpty) return 'Nenhum alimento adicionado';
       return items.map((entry) => entry['name'] as String).join(', ');
@@ -564,7 +571,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 10),
             _buildMealCard(
-              'Café da Manhã',
+              'Café da manhã',
               'Café da manhã',
               Icons.wb_sunny_outlined,
               mealCalories,
@@ -578,7 +585,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               mealSummary,
             ),
             _buildMealCard(
-              'Lanche da Tarde',
+              'Lanche da tarde',
               'Lanche da tarde',
               Icons.coffee_outlined,
               mealCalories,
@@ -611,11 +618,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => MealDetailScreen(
-                mealName: meal,
-                title: title,
-                icon: icon,
-              ),
+              builder: (context) =>
+                  MealDetailScreen(mealName: meal, title: title, icon: icon),
             ),
           );
         },
@@ -666,10 +670,8 @@ class _DashboardSectionTitle extends StatelessWidget {
   final String subtitle;
   final Widget? trailing;
 
-  const _DashboardSectionTitle({
-    required this.title,
-    required this.subtitle,
-  }) : trailing = null;
+  const _DashboardSectionTitle({required this.title, required this.subtitle})
+    : trailing = null;
 
   @override
   Widget build(BuildContext context) {
@@ -1046,7 +1048,6 @@ class _AddFoodScreenState extends State<AddFoodScreen>
     );
   }
 
-
   double _dishTotal(String key) {
     return _dishIngredients.fold<double>(
       0,
@@ -1109,7 +1110,9 @@ class _AddFoodScreenState extends State<AddFoodScreen>
     if (name.isEmpty || _dishIngredients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Informe o nome do prato e adicione pelo menos um ingrediente.'),
+          content: Text(
+            'Informe o nome do prato e adicione pelo menos um ingrediente.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -1220,9 +1223,8 @@ class _AddFoodScreenState extends State<AddFoodScreen>
         const SizedBox(height: 9),
         TextField(
           controller: _dishSearchController,
-          onChanged: (value) => setState(
-            () => _dishSearchQuery = value.trim().toLowerCase(),
-          ),
+          onChanged: (value) =>
+              setState(() => _dishSearchQuery = value.trim().toLowerCase()),
           decoration: InputDecoration(
             hintText: 'Buscar ingrediente...',
             prefixIcon: const Icon(Icons.search_rounded),
@@ -1321,8 +1323,12 @@ class _AddFoodScreenState extends State<AddFoodScreen>
                 ),
                 trailing: IconButton(
                   tooltip: 'Remover ingrediente',
-                  onPressed: () => setState(() => _dishIngredients.removeAt(index)),
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  onPressed: () =>
+                      setState(() => _dishIngredients.removeAt(index)),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: Colors.redAccent,
+                  ),
                 ),
               ),
             );
@@ -1453,7 +1459,10 @@ class _AddFoodScreenState extends State<AddFoodScreen>
           tabs: const [
             Tab(text: 'Alimentos', icon: Icon(Icons.search_rounded)),
             Tab(text: 'Registro manual', icon: Icon(Icons.edit_note_rounded)),
-            Tab(text: 'Montar prato', icon: Icon(Icons.restaurant_menu_rounded)),
+            Tab(
+              text: 'Montar prato',
+              icon: Icon(Icons.restaurant_menu_rounded),
+            ),
           ],
         ),
       ),
@@ -1515,32 +1524,36 @@ class _AddFoodScreenState extends State<AddFoodScreen>
                   child: CircularProgressIndicator(color: AppColors.primary),
                 )
               : _foodsError != null
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.error_outline, color: AppColors.muted, size: 42),
-                            const SizedBox(height: 10),
-                            Text(
-                              _foodsError!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: AppColors.muted),
-                            ),
-                            const SizedBox(height: 12),
-                            ElevatedButton(
-                              onPressed: () {
-                                setState(() => _foodsLoading = true);
-                                _loadFoods();
-                              },
-                              child: const Text('Tentar novamente'),
-                            ),
-                          ],
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          color: AppColors.muted,
+                          size: 42,
                         ),
-                      ),
-                    )
-                  : foods.isEmpty
+                        const SizedBox(height: 10),
+                        Text(
+                          _foodsError!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.muted),
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton(
+                          onPressed: () {
+                            setState(() => _foodsLoading = true);
+                            _loadFoods();
+                          },
+                          child: const Text('Tentar novamente'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : foods.isEmpty
               ? const Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -2110,7 +2123,6 @@ class _MealSectionCard extends StatelessWidget {
   }
 }
 
-
 // -----------------------------------------------------------------------------
 // TELA DE DETALHES DA REFEIÇÃO / EDIÇÃO DE QUANTIDADES
 // -----------------------------------------------------------------------------
@@ -2199,9 +2211,7 @@ class MealDetailScreen extends StatelessWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
           'Remover alimento?',
           style: TextStyle(
@@ -2219,9 +2229,7 @@ class MealDetailScreen extends StatelessWidget {
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Remover'),
           ),
@@ -2244,22 +2252,20 @@ class MealDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        centerTitle: false,
-      ),
+      appBar: AppBar(title: Text(title), centerTitle: false),
       body: ValueListenableBuilder<int>(
         valueListenable: FoodEntryStore.revision,
         builder: (context, revision, child) {
           final mealEntries = FoodEntryStore.entries.where((entry) {
             final date = entry['date'] as DateTime;
-            return entry['meal'] == mealName && _isToday(date);
+            return (entry['meal'] as String).toLowerCase() ==
+                    mealName.toLowerCase() &&
+                _isToday(date);
           }).toList();
 
           final totalCalories = mealEntries.fold<double>(
             0,
-            (sum, entry) =>
-                sum + (entry['calories'] as num).toDouble(),
+            (sum, entry) => sum + (entry['calories'] as num).toDouble(),
           );
 
           if (mealEntries.isEmpty) {
@@ -2628,7 +2634,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     else
                       ...meals.map((meal) {
                         final mealEntries = dayEntries
-                            .where((entry) => entry['meal'] == meal)
+                            .where(
+                              (entry) =>
+                                  (entry['meal'] as String).toLowerCase() ==
+                                  meal.toLowerCase(),
+                            )
                             .toList();
 
                         if (mealEntries.isEmpty) {
@@ -2670,10 +2680,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 ),
                                 const Divider(height: 18),
                                 ...mealEntries.map((entry) {
-                                  final grams =
-                                      (entry['grams'] as num).toDouble();
-                                  final calories =
-                                      (entry['calories'] as num).toDouble();
+                                  final grams = (entry['grams'] as num)
+                                      .toDouble();
+                                  final calories = (entry['calories'] as num)
+                                      .toDouble();
 
                                   return Padding(
                                     padding: const EdgeInsets.symmetric(
